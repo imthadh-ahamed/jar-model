@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Python FastAPI Backend
+  python-backend:
+    build: ./backend-python
+    container_name: water-treatment-python-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./models:/app/models
+    environment:
+      - PORT=5000
+      - ENVIRONMENT=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Node.js Express Backend
+  node-backend:
+    build: ./backend-node
+    container_name: water-treatment-node-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - PYTHON_SERVICE_URL=http://python-backend:5000
+    depends_on:
+      python-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build: ./frontend-nextjs
+    container_name: water-treatment-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_BACKEND_URL=http://node-backend:3001
+      - NEXT_PUBLIC_APP_NAME=Water Treatment Prediction App
+      - NEXT_PUBLIC_APP_VERSION=1.0.0
+    depends_on:
+      node-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/predict"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  default:
+    name: water-treatment-network
+    driver: bridge
+
+volumes:
+  models:
+    driver: local
